@@ -2394,12 +2394,11 @@ export async function codexAppServerTurnInputFromPrompt(
       }
       continue;
     }
-    if (record.type === "github_pr" || record.type === "github_issue") {
+    const renderedAttachment = renderPromptAttachmentAsText(record);
+    if (renderedAttachment !== null) {
       output.push({
         type: "text",
-        text: renderPromptAttachmentAsText(
-          record as Extract<AgentPromptContentBlock, { type: "github_pr" | "github_issue" }>,
-        ),
+        text: renderedAttachment,
       });
       continue;
     }

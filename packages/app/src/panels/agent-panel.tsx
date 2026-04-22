@@ -24,6 +24,7 @@ import {
   useAgentScreenStateMachine,
 } from "@/hooks/use-agent-screen-state-machine";
 import { useArchiveAgent } from "@/hooks/use-archive-agent";
+import { useGeneratedReviewComposerAttachment } from "@/hooks/use-generated-review-composer-attachment";
 import { useKeyboardShiftStyle } from "@/hooks/use-keyboard-shift-style";
 import { useStableEvent } from "@/hooks/use-stable-event";
 import { usePaneContext, usePaneFocus } from "@/panels/pane-context";
@@ -42,6 +43,7 @@ import {
 } from "@/screens/agent/agent-ready-screen-bottom-anchor";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
+import { usePanelStore } from "@/stores/panel-store";
 import { type Agent, useSessionStore } from "@/stores/session-store";
 import type { PendingPermission } from "@/types/shared";
 import type { StreamItem } from "@/types/stream";
@@ -1184,12 +1186,18 @@ function ActiveAgentComposer({
   onMessageSent: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const { workspaceId } = usePaneContext();
   const agentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
       agentId,
     }),
     initialCwd,
+  });
+  const generatedReview = useGeneratedReviewComposerAttachment({
+    serverId,
+    cwd: agentInputDraft.cwd,
+    workspaceId,
   });
 
   return (
@@ -1201,6 +1209,8 @@ function ActiveAgentComposer({
         value={agentInputDraft.text}
         onChangeText={agentInputDraft.setText}
         attachments={agentInputDraft.attachments}
+        generatedAttachment={generatedReview.attachment}
+        onOpenGeneratedAttachment={generatedReview.openAttachment}
         onChangeAttachments={agentInputDraft.setAttachments}
         cwd={agentInputDraft.cwd}
         clearDraft={agentInputDraft.clear}

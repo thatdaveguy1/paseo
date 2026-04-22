@@ -9,6 +9,7 @@ import { AgentStreamView } from "@/components/agent-stream-view";
 import type { ImageAttachment } from "@/components/message-input";
 import { useAgentInputDraft } from "@/hooks/use-agent-input-draft";
 import { useDraftAgentCreateFlow } from "@/hooks/use-draft-agent-create-flow";
+import { useGeneratedReviewComposerAttachment } from "@/hooks/use-generated-review-composer-attachment";
 import { useHostRuntimeClient, useHostRuntimeIsConnected } from "@/runtime/host-runtime";
 import { buildWorkspaceDraftAgentConfig } from "@/screens/workspace/workspace-draft-agent-config";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
@@ -101,6 +102,11 @@ export function WorkspaceDraftAgentTab({
       }
     : null;
   const allowsEmptyAutoSubmit = pendingAutoSubmit?.allowEmptyText === true;
+  const generatedReview = useGeneratedReviewComposerAttachment({
+    serverId,
+    cwd: draftInput.cwd,
+    workspaceId,
+  });
 
   const {
     formErrorMessage,
@@ -379,6 +385,8 @@ export function WorkspaceDraftAgentTab({
             value={draftInput.text}
             onChangeText={draftInput.setText}
             attachments={draftInput.attachments}
+            generatedAttachment={generatedReview.attachment}
+            onOpenGeneratedAttachment={generatedReview.openAttachment}
             onChangeAttachments={draftInput.setAttachments}
             cwd={draftInput.cwd}
             clearDraft={draftInput.clear}

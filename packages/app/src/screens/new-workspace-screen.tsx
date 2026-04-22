@@ -25,7 +25,7 @@ import { useDraftStore } from "@/stores/draft-store";
 import { useWorkspaceDraftSubmissionStore } from "@/stores/workspace-draft-submission-store";
 import { toErrorMessage } from "@/utils/error-messages";
 import { navigateToPreparedWorkspaceTab } from "@/utils/workspace-navigation";
-import type { ComposerAttachment } from "@/attachments/types";
+import type { ComposerAttachment, UserComposerAttachment } from "@/attachments/types";
 import type { ImageAttachment, MessagePayload } from "@/components/message-input";
 import type { AgentAttachment, GitHubSearchItem } from "@server/shared/messages";
 import { pickerItemToCheckoutRequest, type PickerItem } from "./new-workspace-picker-item";
@@ -70,10 +70,10 @@ function pickerItemTriggerLabel(item: PickerItem): string {
 }
 
 function syncPickerPrAttachment(input: {
-  attachments: ComposerAttachment[];
+  attachments: UserComposerAttachment[];
   previousPickerPrNumber: number | null;
   item: PickerItem;
-}): { attachments: ComposerAttachment[]; attachedPrNumber: number | null } {
+}): { attachments: UserComposerAttachment[]; attachedPrNumber: number | null } {
   let nextAttachments = input.attachments;
   let attachedPrNumber: number | null = null;
 

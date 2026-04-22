@@ -58,6 +58,7 @@ import { normalizeAgentSnapshot } from "@/utils/agent-snapshots";
 import { useAgentInputDraft } from "@/hooks/use-agent-input-draft";
 import { useDraftAgentCreateFlow } from "@/hooks/use-draft-agent-create-flow";
 import { useDraftAgentFeatures } from "@/hooks/use-draft-agent-features";
+import { useGeneratedReviewComposerAttachment } from "@/hooks/use-generated-review-composer-attachment";
 import { isWeb } from "@/constants/platform";
 
 const EMPTY_PENDING_PERMISSIONS = new Map();
@@ -649,6 +650,11 @@ function DraftAgentScreenContent({
       [explorerCwd, selectedServerId],
     ),
   );
+  const generatedReview = useGeneratedReviewComposerAttachment({
+    serverId: selectedServerId ?? "",
+    cwd: explorerCwd,
+    workspaceId: draftExplorerWorkspaceId,
+  });
   const canOpenExplorer = draftExplorerCheckout !== null;
   const openExplorerForDraftCheckout = useCallback(() => {
     if (!draftExplorerCheckout) {
@@ -1242,6 +1248,8 @@ function DraftAgentScreenContent({
               value={draftInput.text}
               onChangeText={draftInput.setText}
               attachments={draftInput.attachments}
+              generatedAttachment={generatedReview.attachment}
+              onOpenGeneratedAttachment={generatedReview.openAttachment}
               onChangeAttachments={draftInput.setAttachments}
               cwd={draftInput.cwd}
               clearDraft={draftInput.clear}
