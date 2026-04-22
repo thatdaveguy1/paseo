@@ -209,6 +209,40 @@ describe("TerminalManager", () => {
     });
   });
 
+  describe("setTerminalTitle", () => {
+    it("returns false for unknown terminal ids without changing existing terminals", async () => {
+      manager = createTerminalManager();
+      const session = await manager.createTerminal({
+        cwd: "/tmp",
+        title: "Existing title",
+      });
+      const snapshots: Array<Array<{ id: string; title?: string }>> = [];
+      const unsubscribe = manager.subscribeTerminalsChanged((input) => {
+        snapshots.push(
+          input.terminals.map((terminal) => ({
+            id: terminal.id,
+            ...(terminal.title ? { title: terminal.title } : {}),
+          })),
+        );
+      });
+
+      expect(manager.setTerminalTitle("unknown-id", "x")).toBe(false);
+      expect(session.getTitle()).toBe("Existing title");
+      expect(session.getState().title).toBe("Existing title");
+      expect(snapshots).toEqual([]);
+
+      unsubscribe();
+    });
+
+    it("returns true and updates the terminal title for existing terminals", async () => {
+      manager = createTerminalManager();
+      const session = await manager.createTerminal({ cwd: "/tmp" });
+
+      expect(manager.setTerminalTitle(session.id, "x")).toBe(true);
+      expect(session.getTitle()).toBe("x");
+    });
+  });
+
   describe("killTerminal", () => {
     it("removes terminal from manager", async () => {
       manager = createTerminalManager();

@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   buildTerminalEnvironment,
   createTerminal,
@@ -20,6 +20,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { setImmediate as waitForImmediate } from "node:timers/promises";
 
 const hasZsh = existsSync("/bin/zsh");
 
@@ -102,11 +103,23 @@ async function waitForTitle(
   throw new Error("Timeout waiting for terminal title predicate to match");
 }
 
+async function waitForScheduledTimers(expectedTimerCount: number): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (vi.getTimerCount() === expectedTimerCount) {
+      return;
+    }
+    await waitForImmediate();
+  }
+
+  throw new Error(`Expected ${expectedTimerCount} scheduled timers, got ${vi.getTimerCount()}`);
+}
+
 describe("Terminal", () => {
   const sessions: TerminalSession[] = [];
   const temporaryDirs: string[] = [];
 
   afterEach(async () => {
+    vi.useRealTimers();
     for (const session of sessions) {
       session.kill();
     }
@@ -459,6 +472,96 @@ describe("Terminal", () => {
 
       expect(session.getTitle()).toBe("typecheck");
       expect(session.getState().title).toBe("typecheck");
+    });
+
+    it("clears already scheduled OSC title debounce timers when setting a user title", async () => {
+      const session = trackSession(
+        await createTerminal({
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+        }),
+      );
+      const seenTitles: Array<string | undefined> = [];
+      const unsubscribeTitle = session.onTitleChange((title) => {
+        seenTitles.push(title);
+      });
+
+      await waitForLines(session, ["$"]);
+      session.send({ type: "input", data: "printf '\\033]0;Build Log\\007'\r" });
+
+      await waitForTitle(session, (title) => title === "Build Log");
+
+      vi.useFakeTimers();
+      session.send({ type: "input", data: "printf '\\033]0;Pending Shell Title\\007'\r" });
+      await waitForScheduledTimers(1);
+
+      session.setTitle("User terminal");
+      await vi.advanceTimersByTimeAsync(250);
+      vi.useRealTimers();
+
+      expect(seenTitles).toEqual(["Build Log", "User terminal"]);
+      expect(session.getTitle()).toBe("User terminal");
+      expect(session.getState().title).toBe("User terminal");
+
+      unsubscribeTitle();
+    });
+
+    it("ignores later OSC title updates after setting a user title", async () => {
+      const session = trackSession(
+        await createTerminal({
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+        }),
+      );
+      const seenTitles: Array<string | undefined> = [];
+      const unsubscribeTitle = session.onTitleChange((title) => {
+        seenTitles.push(title);
+      });
+
+      await waitForLines(session, ["$"]);
+      session.send({ type: "input", data: "printf '\\033]0;Build Log\\007'\r" });
+
+      await waitForTitle(session, (title) => title === "Build Log");
+
+      session.setTitle("User terminal");
+      session.send({ type: "input", data: "printf '\\033]0;Later Shell Title\\007'\r" });
+      await new Promise((resolve) => setTimeout(resolve, 250));
+
+      expect(seenTitles).toEqual(["Build Log", "User terminal"]);
+      expect(session.getTitle()).toBe("User terminal");
+      expect(session.getState().title).toBe("User terminal");
+
+      unsubscribeTitle();
+    });
+
+    it("trims user-set titles and treats empty titles as no-ops", async () => {
+      const session = trackSession(
+        await createTerminal({
+          cwd: "/tmp",
+          shell: "/bin/sh",
+          env: { PS1: "$ " },
+        }),
+      );
+      const seenTitles: Array<string | undefined> = [];
+      const unsubscribeTitle = session.onTitleChange((title) => {
+        seenTitles.push(title);
+      });
+
+      await waitForLines(session, ["$"]);
+
+      session.setTitle("   ");
+      session.send({ type: "input", data: "printf '\\033]0;Build Log\\007'\r" });
+      await waitForTitle(session, (title) => title === "Build Log");
+
+      session.setTitle("  User terminal  ");
+
+      expect(seenTitles).toEqual(["Build Log", "User terminal"]);
+      expect(session.getTitle()).toBe("User terminal");
+      expect(session.getState().title).toBe("User terminal");
+
+      unsubscribeTitle();
     });
 
     it("emits command completion from VS Code OSC 633 without visible output", async () => {

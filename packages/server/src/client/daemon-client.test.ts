@@ -1363,6 +1363,116 @@ describe("DaemonClient", () => {
     });
   });
 
+  test("renames a branch via RPC", async () => {
+    const logger = createMockLogger();
+    const mock = createMockTransport();
+
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_unit_test",
+      logger,
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+
+    const connectPromise = client.connect();
+    mock.triggerOpen();
+    await connectPromise;
+
+    const promise = client.renameBranch({ cwd: "/tmp/project", branch: "new" });
+
+    expect(mock.sent).toHaveLength(1);
+    const request = JSON.parse(String(mock.sent[0])) as {
+      type: "session";
+      message: {
+        type: "checkout_rename_branch_request";
+        cwd: string;
+        branch: string;
+        requestId: string;
+      };
+    };
+    expect(request.message.type).toBe("checkout_rename_branch_request");
+    expect(request.message.cwd).toBe("/tmp/project");
+    expect(request.message.branch).toBe("new");
+    expect(typeof request.message.requestId).toBe("string");
+    expect(request.message.requestId.length).toBeGreaterThan(0);
+
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "checkout_rename_branch_response",
+        payload: {
+          requestId: request.message.requestId,
+          success: true,
+          cwd: "/tmp/project",
+          currentBranch: "new",
+          error: null,
+        },
+      }),
+    );
+
+    await expect(promise).resolves.toEqual({
+      requestId: request.message.requestId,
+      success: true,
+      cwd: "/tmp/project",
+      currentBranch: "new",
+      error: null,
+    });
+  });
+
+  test("returns renameBranch business failures", async () => {
+    const logger = createMockLogger();
+    const mock = createMockTransport();
+
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_unit_test",
+      logger,
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+
+    const connectPromise = client.connect();
+    mock.triggerOpen();
+    await connectPromise;
+
+    const promise = client.renameBranch({ cwd: "/tmp/project", branch: "existing" });
+    const request = JSON.parse(String(mock.sent[0])) as {
+      type: "session";
+      message: {
+        requestId: string;
+      };
+    };
+
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "checkout_rename_branch_response",
+        payload: {
+          requestId: request.message.requestId,
+          success: false,
+          cwd: "/tmp/project",
+          currentBranch: "old",
+          error: {
+            code: "NOT_ALLOWED",
+            message: "Branch already exists",
+          },
+        },
+      }),
+    );
+
+    await expect(promise).resolves.toEqual({
+      requestId: request.message.requestId,
+      success: false,
+      cwd: "/tmp/project",
+      currentBranch: "old",
+      error: {
+        code: "NOT_ALLOWED",
+        message: "Branch already exists",
+      },
+    });
+  });
+
   test("resubscribes checkout diff streams after reconnect", async () => {
     const logger = createMockLogger();
     const mock = createMockTransport();
@@ -2580,6 +2690,175 @@ describe("DaemonClient", () => {
         type: "unsubscribe_terminals_request",
         cwd: "/tmp/project",
       },
+    });
+  });
+
+  test("renames a terminal via RPC", async () => {
+    const logger = createMockLogger();
+    const mock = createMockTransport();
+
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_unit_test",
+      logger,
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+
+    const connectPromise = client.connect();
+    mock.triggerOpen();
+    await connectPromise;
+
+    const promise = client.renameTerminal({ terminalId: "term-1", title: "Dev Server" });
+
+    expect(mock.sent).toHaveLength(1);
+    const request = JSON.parse(String(mock.sent[0])) as {
+      type: "session";
+      message: {
+        type: "rename_terminal_request";
+        terminalId: string;
+        title: string;
+        requestId: string;
+      };
+    };
+    expect(request.message.type).toBe("rename_terminal_request");
+    expect(request.message.terminalId).toBe("term-1");
+    expect(request.message.title).toBe("Dev Server");
+    expect(typeof request.message.requestId).toBe("string");
+    expect(request.message.requestId.length).toBeGreaterThan(0);
+
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "rename_terminal_response",
+        payload: {
+          requestId: request.message.requestId,
+          success: true,
+          error: null,
+        },
+      }),
+    );
+
+    await expect(promise).resolves.toEqual({
+      requestId: request.message.requestId,
+      success: true,
+      error: null,
+    });
+  });
+
+  test("returns renameTerminal business failures", async () => {
+    const logger = createMockLogger();
+    const mock = createMockTransport();
+
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_unit_test",
+      logger,
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+
+    const connectPromise = client.connect();
+    mock.triggerOpen();
+    await connectPromise;
+
+    const promise = client.renameTerminal({ terminalId: "missing", title: "Dev Server" });
+    const request = JSON.parse(String(mock.sent[0])) as {
+      type: "session";
+      message: {
+        requestId: string;
+      };
+    };
+
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "rename_terminal_response",
+        payload: {
+          requestId: request.message.requestId,
+          success: false,
+          error: "Terminal not found",
+        },
+      }),
+    );
+
+    await expect(promise).resolves.toEqual({
+      requestId: request.message.requestId,
+      success: false,
+      error: "Terminal not found",
+    });
+  });
+
+  test("correlates concurrent renameTerminal responses by requestId", async () => {
+    const logger = createMockLogger();
+    const mock = createMockTransport();
+
+    const client = new DaemonClient({
+      url: "ws://test",
+      clientId: "clsk_unit_test",
+      logger,
+      reconnect: { enabled: false },
+      transportFactory: () => mock.transport,
+    });
+    clients.push(client);
+
+    const connectPromise = client.connect();
+    mock.triggerOpen();
+    await connectPromise;
+
+    const firstPromise = client.renameTerminal({ terminalId: "term-1", title: "One" });
+    const secondPromise = client.renameTerminal({ terminalId: "term-2", title: "Two" });
+    const firstSettled = vi.fn();
+    void firstPromise.then(firstSettled, firstSettled);
+
+    expect(mock.sent).toHaveLength(2);
+    const firstRequest = JSON.parse(String(mock.sent[0])) as {
+      type: "session";
+      message: {
+        requestId: string;
+      };
+    };
+    const secondRequest = JSON.parse(String(mock.sent[1])) as {
+      type: "session";
+      message: {
+        requestId: string;
+      };
+    };
+
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "rename_terminal_response",
+        payload: {
+          requestId: secondRequest.message.requestId,
+          success: true,
+          error: null,
+        },
+      }),
+    );
+
+    await expect(secondPromise).resolves.toEqual({
+      requestId: secondRequest.message.requestId,
+      success: true,
+      error: null,
+    });
+    await Promise.resolve();
+    expect(firstSettled).not.toHaveBeenCalled();
+
+    mock.triggerMessage(
+      wrapSessionMessage({
+        type: "rename_terminal_response",
+        payload: {
+          requestId: firstRequest.message.requestId,
+          success: true,
+          error: null,
+        },
+      }),
+    );
+
+    await expect(firstPromise).resolves.toEqual({
+      requestId: firstRequest.message.requestId,
+      success: true,
+      error: null,
     });
   });
 
