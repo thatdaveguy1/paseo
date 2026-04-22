@@ -43,6 +43,8 @@ import {
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { type Agent, useSessionStore } from "@/stores/session-store";
+import { useSubagentsForParent } from "@/subagents/subagents";
+import { SubagentsSection } from "@/subagents/subagents-section";
 import type { PendingPermission } from "@/types/shared";
 import type { StreamItem } from "@/types/stream";
 import { getInitDeferred, getInitKey } from "@/utils/agent-initialization";
@@ -1184,6 +1186,17 @@ function ActiveAgentComposer({
   onMessageSent: () => void;
 }) {
   const insets = useSafeAreaInsets();
+  const paneContext = usePaneContext();
+  const subagentRows = useSubagentsForParent({
+    serverId: paneContext.serverId,
+    parentAgentId: agentId,
+  });
+  const handleOpenSubagent = useCallback(
+    (subagentId: string) => {
+      paneContext.openTab({ kind: "agent", agentId: subagentId });
+    },
+    [paneContext],
+  );
   const agentInputDraft = useAgentInputDraft({
     draftKey: buildDraftStoreKey({
       serverId,
@@ -1194,6 +1207,7 @@ function ActiveAgentComposer({
 
   return (
     <View style={[styles.inputAreaWrapper, { paddingBottom: insets.bottom }]}>
+      <SubagentsSection rows={subagentRows} onOpenSubagent={handleOpenSubagent} />
       <Composer
         agentId={agentId}
         serverId={serverId}

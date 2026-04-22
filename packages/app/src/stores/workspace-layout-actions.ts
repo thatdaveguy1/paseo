@@ -202,6 +202,7 @@ export interface WorkspaceTabSnapshot {
   agentsHydrated: boolean;
   terminalsHydrated: boolean;
   activeAgentIds: Iterable<string>;
+  autoOpenAgentIds: Iterable<string>;
   knownAgentIds: Iterable<string>;
   knownTerminalIds?: Iterable<string>;
   standaloneTerminalIds: Iterable<string>;
@@ -1453,6 +1454,7 @@ export function reconcileWorkspaceTabs(
   const pinnedAgentIds = new Set(state.pinnedAgentIds ?? []);
   const hiddenAgentIds = new Set(state.hiddenAgentIds ?? []);
   const activeAgentIds = normalizeStringSet(snapshot.activeAgentIds);
+  const autoOpenAgentIds = normalizeStringSet(snapshot.autoOpenAgentIds);
   const knownAgentIds = normalizeStringSet(snapshot.knownAgentIds);
   const standaloneTerminalIds = normalizeStringSet(snapshot.standaloneTerminalIds);
   const knownTerminalIds = snapshot.knownTerminalIds
@@ -1466,6 +1468,15 @@ export function reconcileWorkspaceTabs(
   }
   for (const agentId of hiddenAgentIds) {
     visibleAgentIds.delete(agentId);
+  }
+  const autoOpenSet = new Set(autoOpenAgentIds);
+  for (const agentId of pinnedAgentIds) {
+    if (knownAgentIds.has(agentId)) {
+      autoOpenSet.add(agentId);
+    }
+  }
+  for (const agentId of hiddenAgentIds) {
+    autoOpenSet.delete(agentId);
   }
 
   const initialTabs = collectAllTabs(nextLayout.root);
@@ -1559,8 +1570,8 @@ export function reconcileWorkspaceTabs(
     currentEntityTabs.filter(isTerminalTab).map((tab) => tab.target.terminalId),
   );
 
-  const sortedVisibleAgentIds = [...visibleAgentIds].sort();
-  for (const agentId of sortedVisibleAgentIds) {
+  const sortedAutoOpenAgentIds = [...autoOpenSet].sort();
+  for (const agentId of sortedAutoOpenAgentIds) {
     if (currentAgentIds.has(agentId)) {
       continue;
     }

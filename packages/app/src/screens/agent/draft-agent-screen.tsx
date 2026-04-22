@@ -884,6 +884,7 @@ function DraftAgentScreenContent({
         cwd,
         model,
         thinkingOptionId,
+        parentAgentId: null,
         labels: {},
       };
     },

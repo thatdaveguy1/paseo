@@ -178,6 +178,7 @@ export function WorkspaceDraftAgentTab({
         model,
         features: composerState.statusControls.features,
         thinkingOptionId,
+        parentAgentId: null,
         labels: {},
       };
     },

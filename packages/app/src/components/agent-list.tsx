@@ -74,6 +74,7 @@ function buildHistoricalAgentDetail(agent: AggregatedAgent): Agent {
     attentionTimestamp: agent.attentionTimestamp,
     archivedAt: agent.archivedAt,
     labels: agent.labels,
+    parentAgentId: null,
   };
 }
 

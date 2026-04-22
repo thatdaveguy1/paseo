@@ -36,6 +36,7 @@ function makeAgent(input?: Partial<Agent>): Agent {
     attentionReason: input?.attentionReason ?? null,
     attentionTimestamp: input?.attentionTimestamp ?? null,
     archivedAt: input?.archivedAt ?? null,
+    parentAgentId: input?.parentAgentId ?? null,
     labels: input?.labels ?? {},
     projectPlacement: input?.projectPlacement ?? null,
   };
