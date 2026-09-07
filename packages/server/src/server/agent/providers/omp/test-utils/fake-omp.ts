@@ -59,11 +59,11 @@ export class FakeOmp implements OmpRuntime {
     FakeOmpSubagentSubscriptionLevel,
     Error
   >();
+  private readonly initialStatePatches: Array<Partial<OmpSessionState>> = [];
 
   constructor(command: [string, ...string[]] = ["omp"]) {
     this.command = command;
   }
-
   async startSession(input: OmpStartSessionInput): Promise<FakeOmpSession> {
     const launch = buildOmpLaunch({
       command: this.command,
@@ -71,6 +71,10 @@ export class FakeOmp implements OmpRuntime {
     });
     this.recordedLaunches.push(launch);
     const session = new FakeOmpSession(launch);
+    const initialStatePatch = this.initialStatePatches.shift();
+    if (initialStatePatch) {
+      session.state = { ...session.state, ...initialStatePatch };
+    }
     session.commands = this.queuedCommands.shift() ?? [];
     for (const [level, error] of this.queuedSubagentSubscriptionErrors) {
       session.subagentSubscriptionErrors.set(level, error);
@@ -82,6 +86,9 @@ export class FakeOmp implements OmpRuntime {
 
   queueCommands(commands: OmpRpcSlashCommand[]): void {
     this.queuedCommands.push(commands);
+  }
+  queueInitialStatePatch(patch: Partial<OmpSessionState>): void {
+    this.initialStatePatches.push(patch);
   }
 
   failNextSubagentSubscription(level: FakeOmpSubagentSubscriptionLevel, error: Error): void {

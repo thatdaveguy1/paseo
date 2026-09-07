@@ -1,3 +1,6 @@
+import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { setImmediate as waitForImmediate } from "node:timers/promises";
 
@@ -6,6 +9,14 @@ import type { OmpNoTurnScheduler, OmpProviderIdleScheduler } from "./agent.js";
 import type { OmpUsagePollScheduler } from "./usage-poller.js";
 import { resolveOmpProviderParams } from "./provider-config.js";
 import { OmpHarness } from "./test-utils/omp-harness.js";
+
+async function createOmpVersionShim(script: string): Promise<string> {
+  const directory = await mkdtemp(join(tmpdir(), "paseo-omp-version-"));
+  const shim = join(directory, "omp-shim");
+  await writeFile(shim, `#!/bin/sh\n${script}\n`, "utf8");
+  await chmod(shim, 0o755);
+  return shim;
+}
 
 test("OMP ready timeout defaults to 20 seconds and RPC timeout overrides both", () => {
   expect(resolveOmpProviderParams({}).runtimeProviderParams).toMatchObject({
@@ -167,14 +178,14 @@ describe("OMP agent client and session", () => {
     );
   });
 
-  test("applies persisted Fast values before the initial state read on create and resume", async () => {
+  test("restores persisted Fast values from the effective model on create and resume", async () => {
     const created = new OmpHarness();
     await created.start({
       model: "openai-codex/gpt-5.6-luna",
       featureValues: { fast_mode: true },
     });
     expect(created.runtime().setFastModeRequests).toEqual([true]);
-    expect(created.runtime().getStateRequestCount).toBe(1);
+    expect(created.runtime().getStateRequestCount).toBe(2);
 
     const resumed = new OmpHarness();
     await resumed.resume(
@@ -182,7 +193,105 @@ describe("OMP agent client and session", () => {
       { model: "openai-codex/gpt-5.6-luna", featureValues: { fast_mode: false } },
     );
     expect(resumed.runtime().setFastModeRequests).toEqual([false]);
-    expect(resumed.runtime().getStateRequestCount).toBe(1);
+    expect(resumed.runtime().getStateRequestCount).toBe(2);
+  });
+
+  test("restores persisted Fast from the runtime effective model when config model is omitted", async () => {
+    const created = new OmpHarness();
+    created.queueInitialState({ model: { provider: "openai-codex", id: "gpt-5.6-luna" } });
+    await created.start({ featureValues: { fast_mode: true } });
+    expect(created.runtime().setFastModeRequests).toEqual([true]);
+    expect(created.features()).toEqual([expect.objectContaining({ id: "fast_mode", value: true })]);
+
+    const resumed = new OmpHarness();
+    resumed.queueInitialState({ model: { provider: "openai-codex", id: "gpt-5.6-luna" } });
+    await resumed.resume(
+      { user: { id: "u1", text: "hello" }, assistant: { id: "a1", text: "hi" } },
+      { featureValues: { fast_mode: false } },
+    );
+    expect(resumed.runtime().setFastModeRequests).toEqual([false]);
+    expect(resumed.features()).toEqual([
+      expect.objectContaining({ id: "fast_mode", value: false }),
+    ]);
+  });
+
+  test("lets startup succeed without claiming Fast when it is configured but unsupported", async () => {
+    const unsupportedModel = new OmpHarness();
+    await unsupportedModel.start({
+      model: "openai-completions/gpt-5.6-luna",
+      featureValues: { fast_mode: true },
+    });
+    expect(unsupportedModel.runtime().setFastModeRequests).toEqual([]);
+    expect(unsupportedModel.runtime().getStateRequestCount).toBe(1);
+    expect(unsupportedModel.features()).toEqual([]);
+
+    const oldBinary = await createOmpVersionShim('echo "omp 16.3.9"');
+    const oldOmp = new OmpHarness({
+      runtimeSettings: { command: { mode: "replace", argv: [oldBinary] } },
+    });
+    await oldOmp.start({
+      model: "openai-codex/gpt-5.6-luna",
+      featureValues: { fast_mode: true },
+    });
+    expect(oldOmp.runtime().setFastModeRequests).toEqual([]);
+    expect(oldOmp.runtime().getStateRequestCount).toBe(1);
+    delete oldOmp.runtime().state.fastModeEnabled;
+    delete oldOmp.runtime().state.fastModeActive;
+    expect(oldOmp.features()).toEqual([]);
+  });
+  test("hides draft Fast features on old or unknown OMP versions", async () => {
+    const oldBinary = await createOmpVersionShim('echo "omp 16.3.9"');
+    const oldOmp = new OmpHarness({
+      runtimeSettings: { command: { mode: "replace", argv: [oldBinary] } },
+    });
+    await expect(oldOmp.clientFeatures({ model: "openai-codex/gpt-5.6-luna" })).resolves.toEqual(
+      [],
+    );
+
+    const missing = new OmpHarness({
+      runtimeSettings: { command: { mode: "replace", argv: ["/definitely-not-here/omp"] } },
+    });
+    await expect(missing.clientFeatures({ model: "openai-codex/gpt-5.6-luna" })).resolves.toEqual(
+      [],
+    );
+
+    const currentBinary = await createOmpVersionShim('echo "omp 18.1.13"');
+    const current = new OmpHarness({
+      runtimeSettings: { command: { mode: "replace", argv: [currentBinary] } },
+    });
+    await expect(current.clientFeatures({ model: "openai-codex/gpt-5.6-luna" })).resolves.toEqual([
+      expect.objectContaining({ id: "fast_mode", value: false }),
+    ]);
+  });
+
+  test("probes custom replacement commands with their configured argv", async () => {
+    const shim = await createOmpVersionShim(
+      'if [ "$1" = "--profile" ]; then echo "omp 18.1.13"; else echo "omp 0.0.0"; fi',
+    );
+    const custom = new OmpHarness({
+      runtimeSettings: { command: { mode: "replace", argv: [shim, "--profile", "work"] } },
+    });
+    await expect(custom.clientFeatures({ model: "openai-codex/gpt-5.6-luna" })).resolves.toEqual([
+      expect.objectContaining({ id: "fast_mode" }),
+    ]);
+
+    const unforwarded = new OmpHarness({
+      runtimeSettings: { command: { mode: "replace", argv: [shim] } },
+    });
+    await expect(
+      unforwarded.clientFeatures({ model: "openai-codex/gpt-5.6-luna" }),
+    ).resolves.toEqual([]);
+  });
+
+  test("rejects non-boolean Fast values before any RPC or config mutation", async () => {
+    const omp = new OmpHarness();
+    await omp.start({ model: "openai-codex/gpt-5.6-luna" });
+
+    await expect(omp.setFeature("fast_mode", "true")).rejects.toThrow("boolean");
+    await expect(omp.setFeature("fast_mode", 1)).rejects.toThrow("boolean");
+    await expect(omp.setFeature("fast_mode", null)).rejects.toThrow("boolean");
+    expect(omp.runtime().setFastModeRequests).toEqual([]);
+    expect(omp.features()).toEqual([expect.objectContaining({ id: "fast_mode", value: false })]);
   });
 
   test("refreshes state and removes stale Fast values after switching models", async () => {
@@ -200,7 +309,7 @@ describe("OMP agent client and session", () => {
 
     await omp.setModel("nvidia/minimaxai/minimax-m3");
 
-    expect(runtime.getStateRequestCount).toBe(2);
+    expect(runtime.getStateRequestCount).toBe(3);
     expect(omp.features()).toEqual([]);
   });
 

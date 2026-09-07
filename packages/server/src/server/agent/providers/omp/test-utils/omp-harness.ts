@@ -11,7 +11,7 @@ import type {
   AgentStreamEvent,
   AgentTimelineItem,
 } from "../../../agent-sdk-types.js";
-import type { PaseoToolCatalog } from "../../../tools/types.js";
+import type { ProviderRuntimeSettings } from "../../../provider-launch-config.js";
 import {
   OmpAgentClient,
   OmpAgentSession,
@@ -20,7 +20,7 @@ import {
 } from "../agent.js";
 import type { OmpUsagePollScheduler } from "../usage-poller.js";
 import type { AgentFeature } from "../../../agent-sdk-types.js";
-import type { OmpAgentMessage, OmpRpcSlashCommand } from "../rpc-types.js";
+import type { OmpAgentMessage, OmpRpcSlashCommand, OmpSessionState } from "../rpc-types.js";
 import { FakeOmp } from "./fake-omp.js";
 
 const CWD = "/tmp/paseo-omp-agent-test";
@@ -72,11 +72,13 @@ export class OmpHarness {
       providerIdleScheduler?: OmpProviderIdleScheduler;
       noTurnScheduler?: OmpNoTurnScheduler;
       usagePollScheduler?: OmpUsagePollScheduler;
+      runtimeSettings?: ProviderRuntimeSettings;
     } = {},
   ) {
     this.client = new OmpAgentClient({
       logger: pino({ level: "silent" }),
       runtime: this.omp,
+      runtimeSettings: options.runtimeSettings,
       providerIdleScheduler: options.providerIdleScheduler,
       noTurnScheduler: options.noTurnScheduler,
       usagePollScheduler: options.usagePollScheduler,
@@ -85,6 +87,10 @@ export class OmpHarness {
 
   queueCommands(commands: OmpRpcSlashCommand[]): void {
     this.omp.queueCommands(commands);
+  }
+
+  queueInitialState(patch: Partial<OmpSessionState>): void {
+    this.omp.queueInitialStatePatch(patch);
   }
 
   failEventSubscription(error: Error): void {

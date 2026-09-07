@@ -42,6 +42,7 @@ import { runProviderRefreshActivity } from "../../provider-refresh-deadline.js";
 import { runProviderTurn } from "../provider-runner.js";
 import {
   checkProviderLaunchAvailable,
+  createProviderEnvSpec,
   resolveProviderLaunch,
   type ProviderRuntimeSettings,
   type ResolvedProviderLaunch,
@@ -58,6 +59,7 @@ import {
 import {
   formatOmpVersionSupport,
   mergeOmpRuntimeSettings,
+  ompVersionSupportsFastMode,
   resolveOmpDiagnosticPaths,
   resolveOmpLaunchMode,
   resolveOmpProviderParams,
@@ -71,6 +73,7 @@ import { shouldDisplayOmpCustomMessage } from "./custom-message.js";
 import { getUserMessageText } from "./message-history.js";
 import { mapOmpSystemNoticeToNotification } from "./system-notice.js";
 import { materializeProviderImage } from "../provider-image-output.js";
+import { execCommand } from "../../../../utils/spawn.js";
 import { OmpCliRuntime } from "./cli-runtime.js";
 import { listOmpImportableSessions, readOmpImportSessionConfig } from "./session-descriptor.js";
 import type { OmpRuntime, OmpRuntimeSession, OmpStartSessionInput } from "./runtime.js";
@@ -1308,12 +1311,15 @@ export class OmpAgentSession implements AgentSession {
     if (featureId !== "fast_mode") {
       throw new Error(`Unknown OMP feature: ${featureId}`);
     }
+    if (typeof value !== "boolean") {
+      throw new Error(`OMP fast mode requires a boolean value, received ${typeof value}`);
+    }
     const modelId = modelToId(this.state.model) ?? this.config.model ?? null;
-    if (Boolean(value) && !ompFastModeSupportedForModelId(modelId)) {
+    if (value && !ompFastModeSupportedForModelId(modelId)) {
       throw new Error(`OMP fast mode is not available for model '${modelId ?? "default"}'`);
     }
 
-    const result = await this.runtimeSession.setFastMode(Boolean(value));
+    const result = await this.runtimeSession.setFastMode(value);
     await this.refreshState();
     this.state = {
       ...this.state,
@@ -2254,6 +2260,7 @@ export class OmpAgentClient implements AgentClient {
   private readonly noTurnScheduler?: OmpNoTurnScheduler;
   private readonly usagePollScheduler?: OmpUsagePollScheduler;
   private readonly runtime: OmpRuntime;
+  private nativeFastModeSupport: Promise<boolean> | null = null;
 
   constructor(options: OmpAgentClientOptions) {
     const { runtimeProviderParams, modelRoleParams } = resolveOmpProviderParams(
@@ -2308,18 +2315,30 @@ export class OmpAgentClient implements AgentClient {
     });
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
+      const reportedState = await runtimeSession.getState();
+      const effectiveModel = modelToId(reportedState.model) ?? config.model ?? null;
       const configuredFastMode = config.featureValues?.fast_mode;
-      const fastModeResult =
-        typeof configuredFastMode === "boolean" && ompFastModeSupportedForModelId(config.model)
-          ? await runtimeSession.setFastMode(configuredFastMode)
-          : undefined;
-      const initialState = await runtimeSession.getState();
-      if (fastModeResult && config.featureValues) {
-        config.featureValues = {
-          ...config.featureValues,
-          fast_mode: fastModeResult.enabled,
-        };
+      let fastModeApplied = false;
+      if (
+        typeof configuredFastMode === "boolean" &&
+        ompFastModeSupportedForModelId(effectiveModel) &&
+        (await this.supportsNativeFastMode())
+      ) {
+        try {
+          const fastModeResult = await runtimeSession.setFastMode(configuredFastMode);
+          config.featureValues = {
+            ...config.featureValues,
+            fast_mode: fastModeResult.enabled,
+          };
+          fastModeApplied = true;
+        } catch (error) {
+          this.logger.debug(
+            { err: error },
+            "OMP fast mode restore failed; continuing without Fast",
+          );
+        }
       }
+      const initialState = fastModeApplied ? await runtimeSession.getState() : reportedState;
       return new OmpAgentSession({
         runtimeSession,
         config,
@@ -2362,19 +2381,30 @@ export class OmpAgentClient implements AgentClient {
     );
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
+      const reportedState = await runtimeSession.getState();
+      const effectiveModel = modelToId(reportedState.model) ?? resumeConfig.config.model ?? null;
       const configuredFastMode = resumeConfig.config.featureValues?.fast_mode;
-      const fastModeResult =
+      let fastModeApplied = false;
+      if (
         typeof configuredFastMode === "boolean" &&
-        ompFastModeSupportedForModelId(resumeConfig.config.model)
-          ? await runtimeSession.setFastMode(configuredFastMode)
-          : undefined;
-      const initialState = await runtimeSession.getState();
-      if (fastModeResult && resumeConfig.config.featureValues) {
-        resumeConfig.config.featureValues = {
-          ...resumeConfig.config.featureValues,
-          fast_mode: fastModeResult.enabled,
-        };
+        ompFastModeSupportedForModelId(effectiveModel) &&
+        (await this.supportsNativeFastMode())
+      ) {
+        try {
+          const fastModeResult = await runtimeSession.setFastMode(configuredFastMode);
+          resumeConfig.config.featureValues = {
+            ...resumeConfig.config.featureValues,
+            fast_mode: fastModeResult.enabled,
+          };
+          fastModeApplied = true;
+        } catch (error) {
+          this.logger.debug(
+            { err: error },
+            "OMP fast mode restore failed; continuing without Fast",
+          );
+        }
       }
+      const initialState = fastModeApplied ? await runtimeSession.getState() : reportedState;
       return new OmpAgentSession({
         runtimeSession,
         config: resumeConfig.config,
@@ -2437,6 +2467,9 @@ export class OmpAgentClient implements AgentClient {
 
   async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
     if (!ompFastModeSupportedForModelId(config.model)) {
+      return [];
+    }
+    if (!(await this.supportsNativeFastMode())) {
       return [];
     }
     return [
@@ -2539,5 +2572,28 @@ export class OmpAgentClient implements AgentClient {
       commandConfig: this.runtimeSettings?.command,
       defaultBinary: "omp",
     });
+  }
+
+  private supportsNativeFastMode(): Promise<boolean> {
+    this.nativeFastModeSupport ??= this.probeNativeFastMode();
+    return this.nativeFastModeSupport;
+  }
+
+  private async probeNativeFastMode(): Promise<boolean> {
+    try {
+      const launch = await this.resolveOmpLaunch();
+      const availability = await checkProviderLaunchAvailable(launch);
+      if (availability.available) {
+        const executable = availability.resolvedPath ?? launch.command;
+        const { stdout, stderr } = await execCommand(executable, [...launch.args, "--version"], {
+          ...createProviderEnvSpec({ runtimeSettings: this.runtimeSettings }),
+          timeout: 5_000,
+        });
+        return ompVersionSupportsFastMode(`${stdout}\n${stderr}`);
+      }
+    } catch (error) {
+      this.logger.debug({ err: error }, "OMP fast mode version probe failed");
+    }
+    return false;
   }
 }

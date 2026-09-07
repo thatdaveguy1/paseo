@@ -12,6 +12,42 @@ const DEFAULT_OMP_READY_TIMEOUT_MS = 20_000;
 const DEFAULT_OMP_RPC_TIMEOUT_MS = 60_000;
 
 export const MIN_SUPPORTED_OMP_VERSION = "16.3.9";
+
+/**
+ * First tagged OMP release containing native `set_fast_mode` (landed upstream
+ * in commit abc2159). Fast stays hidden on older installs even though the
+ * general minimum below them is lower.
+ */
+export const MIN_FAST_MODE_OMP_VERSION = "18.1.0";
+
+export function parseOmpVersion(versionOutput: string): [number, number, number] | null {
+  const match = versionOutput.match(/(\d+)\.(\d+)\.(\d+)\b/);
+  if (!match) {
+    return null;
+  }
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+export function isOmpVersionAtLeast(versionOutput: string, minimum: string): boolean {
+  const installed = parseOmpVersion(versionOutput);
+  const floor = parseOmpVersion(minimum);
+  if (!installed || !floor) {
+    return false;
+  }
+  for (let index = 0; index < 3; index += 1) {
+    if (installed[index]! > floor[index]!) {
+      return true;
+    }
+    if (installed[index]! < floor[index]!) {
+      return false;
+    }
+  }
+  return true;
+}
+
+export function ompVersionSupportsFastMode(versionOutput: string): boolean {
+  return isOmpVersionAtLeast(versionOutput, MIN_FAST_MODE_OMP_VERSION);
+}
 export { OMP_MODES };
 
 export const OmpProviderParamsSchema = z
@@ -117,16 +153,10 @@ export function resolveOmpDiagnosticPaths(
 }
 
 export function formatOmpVersionSupport(versionOutput: string): string {
-  const match = versionOutput.match(/(\d+)\.(\d+)\.(\d+)\b/);
-  if (!match) return `unknown (minimum ${MIN_SUPPORTED_OMP_VERSION})`;
-  const installed = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const minimum = MIN_SUPPORTED_OMP_VERSION.split(".").map(Number);
-  const supported =
-    installed[0]! > minimum[0]! ||
-    (installed[0] === minimum[0] &&
-      (installed[1]! > minimum[1]! ||
-        (installed[1] === minimum[1]! && installed[2]! >= minimum[2]!)));
-  return `${match[1]}.${match[2]}.${match[3]} (${supported ? "supported" : "unsupported"}; minimum ${MIN_SUPPORTED_OMP_VERSION})`;
+  const installed = parseOmpVersion(versionOutput);
+  if (!installed) return `unknown (minimum ${MIN_SUPPORTED_OMP_VERSION})`;
+  const supported = isOmpVersionAtLeast(versionOutput, MIN_SUPPORTED_OMP_VERSION);
+  return `${installed[0]}.${installed[1]}.${installed[2]} (${supported ? "supported" : "unsupported"}; minimum ${MIN_SUPPORTED_OMP_VERSION})`;
 }
 
 export function resolveOmpProviderParams(providerParams: unknown): {
