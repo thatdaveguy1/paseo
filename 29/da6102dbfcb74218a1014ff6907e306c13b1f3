@@ -1,0 +1,47 @@
+packages/server/src/server/agent/providers/omp/agent.ts
+  s_67ab856b6cc4b9::t_909d66add7b603 953-963,1290-1326,2438
+  s_67ab856b6cc4b9::t_1db83a33388827 2313-2322,2326,2365-2377
+  s_67ab856b6cc4b9::t_1c78c882dd75c7 111-114,393-398
+  s_67ab856b6cc4b9::t_9144215c5816bc 2440-2447
+  s_67ab856b6cc4b9::t_40474acfbb4671 399-400
+  s_67ab856b6cc4b9::t_d48db45af964a8 2311-2312
+  s_67ab856b6cc4b9::t_c27decc6ca2f48 2439
+packages/server/src/server/agent/providers/omp/test-utils/omp-harness.ts
+  s_67ab856b6cc4b9::t_c6d51e5b47eeeb 22,450-453,458-464
+  s_67ab856b6cc4b9::t_408cc7cc0a7ebd 454-457
+  s_67ab856b6cc4b9::t_132f12bf5ece6e 465
+packages/server/src/server/agent/providers/omp/agent.test.ts
+  s_67ab856b6cc4b9::t_c3f97d33d4d1aa 166-169
+  s_67ab856b6cc4b9::t_c06efdb34df650 122-128,130-134,140-165,170-216
+  s_67ab856b6cc4b9::t_408cc7cc0a7ebd 129,135-139
+packages/server/src/server/agent/providers/omp/rpc-types.ts
+  s_67ab856b6cc4b9::t_d8ee7647c1836d 591
+  s_67ab856b6cc4b9::t_c7d3563528db16 131-132,549,576-577
+  s_67ab856b6cc4b9::t_ef81cf85a68548 578
+packages/server/src/server/agent/providers/omp/runtime.ts
+  s_67ab856b6cc4b9::t_d8ee7647c1836d 12,60
+packages/server/src/server/agent/providers/omp/test-utils/fake-omp.ts
+  s_67ab856b6cc4b9::t_af2d700efa90b6 18,108,124-125,164-165,299-310
+  s_67ab856b6cc4b9::t_c79e6222a95d6c 311-312
+packages/server/src/server/agent/providers/omp/cli-runtime.ts
+  s_67ab856b6cc4b9::t_d8ee7647c1836d 27,188-190
+  s_67ab856b6cc4b9::t_ad0839bff338de 40,187
+packages/server/src/server/agent/providers/omp/cli-runtime.test.ts
+  s_67ab856b6cc4b9::t_4a9da644f6ce21 266-278
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "29da6102dbfcb74218a1014ff6907e306c13b1f3",
+  "prompts": {},
+  "sessions": {
+    "s_67ab856b6cc4b9": {
+      "agent_id": {
+        "tool": "codex",
+        "id": "01a07d2d-30c3-7f72-bb21-d703ce3fcf06",
+        "model": "gpt-5.6-luna"
+      },
+      "human_author": "David Longman <dlongman@tokentradegames.com>"
+    }
+  }
+}
