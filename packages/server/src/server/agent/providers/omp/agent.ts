@@ -1309,7 +1309,7 @@ export class OmpAgentSession implements AgentSession {
       throw new Error(`Unknown OMP feature: ${featureId}`);
     }
     const modelId = modelToId(this.state.model) ?? this.config.model ?? null;
-    if (!ompFastModeSupportedForModelId(modelId)) {
+    if (Boolean(value) && !ompFastModeSupportedForModelId(modelId)) {
       throw new Error(`OMP fast mode is not available for model '${modelId ?? "default"}'`);
     }
 
