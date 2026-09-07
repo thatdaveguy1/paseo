@@ -1,0 +1,47 @@
+packages/server/src/server/agent/providers/omp/agent.test.ts
+  s_f3bf8e61f12bad::t_4fd4338be937d1 235,241
+  s_f3bf8e61f12bad::t_a63ec0fb1b7432 1-3,13-19
+  s_f3bf8e61f12bad::t_9c49f6e9638d89 181,188,196-234,236-237,240,242-294
+  s_f3bf8e61f12bad::t_69144f39f15662 238-239
+  s_f3bf8e61f12bad::t_90f61d4bc27af2 312
+  s_f3bf8e61f12bad::t_1a4811dfe2469f 20
+packages/server/src/server/agent/providers/omp/provider-config.ts
+  s_f3bf8e61f12bad::t_aed36676582ada 15-50
+  s_f3bf8e61f12bad::t_092fb03b11ab99 156-159
+packages/server/src/server/agent/providers/omp/agent.ts
+  s_f3bf8e61f12bad::t_8134d30d35ad2b 45,62
+  s_f3bf8e61f12bad::t_8cb102e0678597 76
+  s_f3bf8e61f12bad::t_49f2dd033ff39e 1314-1316,1318,1322
+  s_f3bf8e61f12bad::t_4b9a57ee7475aa 2263,2585,2590
+  s_f3bf8e61f12bad::t_a47c847f4d9694 2384-2385,2387-2388,2390-2400
+  s_f3bf8e61f12bad::t_cf23d5c6a8eddd 2318-2319,2321-2338,2402
+  s_f3bf8e61f12bad::t_27c87631293b0e 2401,2576-2584,2586-2589,2591
+  s_f3bf8e61f12bad::t_1e2333ef0243f7 2339
+  s_f3bf8e61f12bad::t_568714d27c20f7 2403-2405
+  s_f3bf8e61f12bad::t_d98b2abbe4dbb1 2592-2594
+packages/server/src/server/agent/providers/omp/test-utils/omp-harness.ts
+  s_f3bf8e61f12bad::t_6fb358a3f73a84 92-95
+  s_f3bf8e61f12bad::t_9e284aee9b3aa7 23
+  s_f3bf8e61f12bad::t_c4a72eaddd0370 14,75,81
+packages/server/src/server/agent/providers/omp/test-utils/fake-omp.ts
+  s_f3bf8e61f12bad::t_2b0778513ce905 62,90-91
+  s_f3bf8e61f12bad::t_a980c9722304ea 74-76
+  s_f3bf8e61f12bad::t_691642fb5a192d 77
+  s_f3bf8e61f12bad::t_1b29915ebac4c1 92
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.21",
+  "base_commit_sha": "4817fbf7d192c8a2bcd802c45b26efed988c3f69",
+  "prompts": {},
+  "sessions": {
+    "s_f3bf8e61f12bad": {
+      "agent_id": {
+        "tool": "omp",
+        "id": "01a07d9d-a7ae-7723-b583-64beebc72dea",
+        "model": "muse-spark-1.3-contributor"
+      },
+      "human_author": "David Longman <dlongman@tokentradegames.com>"
+    }
+  }
+}
