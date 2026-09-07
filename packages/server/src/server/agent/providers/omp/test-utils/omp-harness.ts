@@ -19,6 +19,7 @@ import {
   type OmpProviderIdleScheduler,
 } from "../agent.js";
 import type { OmpUsagePollScheduler } from "../usage-poller.js";
+import type { AgentFeature } from "../../../agent-sdk-types.js";
 import type { OmpAgentMessage, OmpRpcSlashCommand } from "../rpc-types.js";
 import { FakeOmp } from "./fake-omp.js";
 
@@ -444,6 +445,22 @@ export class OmpHarness {
 
   async setMode(modeId: string) {
     return await this.requireSession().setMode(modeId);
+  }
+
+  features(): AgentFeature[] {
+    return this.requireSession().features ?? [];
+  }
+
+  async clientFeatures(config: Partial<AgentSessionConfig> = {}): Promise<AgentFeature[]> {
+    return await this.client.listFeatures({ provider: "omp", cwd: CWD, ...config });
+  }
+
+  async setFeature(featureId: string, value: unknown): Promise<void> {
+    await this.requireSession().setFeature?.(featureId, value);
+  }
+
+  async setModel(modelId: string | null): Promise<void> {
+    await this.requireSession().setModel?.(modelId);
   }
 
   async rewind(messageId: string, restoredPrompt: string): Promise<void> {

@@ -24,6 +24,7 @@ import {
   OmpRuntimeEventSchema,
   OmpSessionStateSchema,
   OmpSessionStatsSchema,
+  OmpSetFastModeResultSchema,
   type OmpThinkingLevel,
   type OmpAgentMessage,
   type OmpModel,
@@ -36,6 +37,7 @@ import {
   type OmpRuntimeEvent,
   type OmpSessionState,
   type OmpSessionStats,
+  type OmpSetFastModeResult,
   type OmpSubagentSubscriptionLevel,
 } from "./rpc-types.js";
 
@@ -180,6 +182,10 @@ class OmpCliRuntimeSession implements OmpRuntimeSession {
 
   async setThinkingLevel(level: OmpThinkingLevel): Promise<void> {
     await this.request({ type: "set_thinking_level", level });
+  }
+
+  async setFastMode(enabled: boolean): Promise<OmpSetFastModeResult> {
+    return OmpSetFastModeResultSchema.parse(await this.request({ type: "set_fast_mode", enabled }));
   }
 
   async getSessionStats(): Promise<OmpSessionStats> {

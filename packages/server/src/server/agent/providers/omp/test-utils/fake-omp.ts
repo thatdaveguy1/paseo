@@ -15,6 +15,7 @@ import type {
   OmpRuntimeEvent,
   OmpSessionState,
   OmpSessionStats,
+  OmpSetFastModeResult,
   OmpThinkingLevel,
 } from "../rpc-types.js";
 import { buildOmpLaunch } from "../runtime.js";
@@ -104,6 +105,7 @@ export class FakeOmpSession implements OmpRuntimeSession {
   readonly subagentMessageRequests: FakeOmpSubagentMessagesSelector[] = [];
   readonly setModelRequests: Array<{ provider: string; modelId: string }> = [];
   readonly setThinkingLevelRequests: OmpThinkingLevel[] = [];
+  readonly setFastModeRequests: boolean[] = [];
   readonly handoffRequests: Array<{ customInstructions?: string }> = [];
   readonly steerRequests: Array<{ message: string; imageCount: number }> = [];
   readonly followUpRequests: Array<{ message: string; imageCount: number }> = [];
@@ -119,6 +121,8 @@ export class FakeOmpSession implements OmpRuntimeSession {
     response: { value?: string; confirmed?: boolean; cancelled?: boolean };
   }> = [];
   setModelResult: OmpModel | null = null;
+  setFastModeResult: OmpSetFastModeResult | null = null;
+  setFastModeError: Error | null = null;
   models: OmpModel[] = [];
   messages: OmpAgentMessage[] = [];
   stats: OmpSessionStats = {
@@ -157,6 +161,8 @@ export class FakeOmpSession implements OmpRuntimeSession {
       isStreaming: false,
       isCompacting: false,
       autoCompactionEnabled: true,
+      fastModeEnabled: false,
+      fastModeActive: false,
       sessionFile: launch.session ?? "/tmp/omp-session",
       sessionId: "omp-session-1",
       messageCount: 0,
@@ -288,6 +294,20 @@ export class FakeOmpSession implements OmpRuntimeSession {
 
   async setThinkingLevel(level: OmpThinkingLevel): Promise<void> {
     this.setThinkingLevelRequests.push(level);
+  }
+
+  async setFastMode(enabled: boolean): Promise<OmpSetFastModeResult> {
+    this.setFastModeRequests.push(enabled);
+    if (this.setFastModeError) {
+      throw this.setFastModeError;
+    }
+    const result = this.setFastModeResult ?? { enabled, active: enabled };
+    this.state = {
+      ...this.state,
+      fastModeEnabled: result.enabled,
+      fastModeActive: result.active,
+    };
+    return result;
   }
 
   async getSessionStats(): Promise<OmpSessionStats> {

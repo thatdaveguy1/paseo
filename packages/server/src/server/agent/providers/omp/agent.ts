@@ -108,6 +108,10 @@ import {
   mapOmpRpcUiPermissionRequest,
 } from "./rpc-ui-permission-mapper.js";
 import { DEFAULT_OMP_THINKING_LEVEL, mapOmpModel } from "./map-omp-model.js";
+import {
+  CODEX_FAST_MODE_FEATURE,
+  codexModelSupportsFastMode,
+} from "../codex-feature-definitions.js";
 
 const OMP_PROVIDER = "omp";
 const QUESTION_RESPONSE_HEADER = "Response";
@@ -384,6 +388,14 @@ function parseModelReference(modelId: string | null): OmpModelReference | null {
     }
   }
   return { id: modelId };
+}
+
+function ompFastModeSupportedForModelId(modelId: string | null | undefined): boolean {
+  if (typeof modelId !== "string" || modelId.trim().length === 0) {
+    return false;
+  }
+  const reference = parseModelReference(modelId);
+  return reference?.provider === "openai-codex" && codexModelSupportsFastMode(reference.id);
 }
 
 function parsePersistenceMetadata(metadata: AgentMetadata | undefined): OmpPersistenceMetadata {
@@ -938,6 +950,17 @@ export class OmpAgentSession implements AgentSession {
     return this.state.sessionId;
   }
 
+  get features(): AgentFeature[] {
+    const modelId = modelToId(this.state.model) ?? this.config.model ?? null;
+    if (!ompFastModeSupportedForModelId(modelId)) {
+      return [];
+    }
+    if (typeof this.state.fastModeEnabled !== "boolean") {
+      return [];
+    }
+    return [{ ...CODEX_FAST_MODE_FEATURE, value: this.state.fastModeEnabled }];
+  }
+
   async run(prompt: AgentPromptInput, options?: AgentRunOptions): Promise<AgentRunResult> {
     return runProviderTurn({
       prompt,
@@ -1264,6 +1287,43 @@ export class OmpAgentSession implements AgentSession {
       model,
     };
     this.config.model = `${model.provider}/${model.id}`;
+    await this.refreshState();
+    if (!ompFastModeSupportedForModelId(this.config.model)) {
+      const featureValues = this.config.featureValues;
+      if (featureValues && "fast_mode" in featureValues) {
+        const nextFeatureValues = { ...featureValues };
+        delete nextFeatureValues.fast_mode;
+        this.config.featureValues =
+          Object.keys(nextFeatureValues).length > 0 ? nextFeatureValues : undefined;
+      }
+    } else if (typeof this.state.fastModeEnabled === "boolean") {
+      this.config.featureValues = {
+        ...this.config.featureValues,
+        fast_mode: this.state.fastModeEnabled,
+      };
+    }
+  }
+
+  async setFeature(featureId: string, value: unknown): Promise<void> {
+    if (featureId !== "fast_mode") {
+      throw new Error(`Unknown OMP feature: ${featureId}`);
+    }
+    const modelId = modelToId(this.state.model) ?? this.config.model ?? null;
+    if (!ompFastModeSupportedForModelId(modelId)) {
+      throw new Error(`OMP fast mode is not available for model '${modelId ?? "default"}'`);
+    }
+
+    const result = await this.runtimeSession.setFastMode(Boolean(value));
+    await this.refreshState();
+    this.state = {
+      ...this.state,
+      fastModeEnabled: result.enabled,
+      fastModeActive: result.active,
+    };
+    this.config.featureValues = {
+      ...this.config.featureValues,
+      fast_mode: result.enabled,
+    };
   }
 
   async setThinkingOption(thinkingOptionId: string | null): Promise<void> {
@@ -2248,10 +2308,22 @@ export class OmpAgentClient implements AgentClient {
     });
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
+      const configuredFastMode = config.featureValues?.fast_mode;
+      const fastModeResult =
+        typeof configuredFastMode === "boolean" && ompFastModeSupportedForModelId(config.model)
+          ? await runtimeSession.setFastMode(configuredFastMode)
+          : undefined;
+      const initialState = await runtimeSession.getState();
+      if (fastModeResult && config.featureValues) {
+        config.featureValues = {
+          ...config.featureValues,
+          fast_mode: fastModeResult.enabled,
+        };
+      }
       return new OmpAgentSession({
         runtimeSession,
         config,
-        initialState: await runtimeSession.getState(),
+        initialState,
         currentModeId: launchMode.modeId,
         logger: this.logger,
         subagentCardScheduler: this.subagentCardScheduler,
@@ -2290,10 +2362,23 @@ export class OmpAgentClient implements AgentClient {
     );
     try {
       await this.configureNativePaseoTools(runtimeSession, launchContext?.paseoTools);
+      const configuredFastMode = resumeConfig.config.featureValues?.fast_mode;
+      const fastModeResult =
+        typeof configuredFastMode === "boolean" &&
+        ompFastModeSupportedForModelId(resumeConfig.config.model)
+          ? await runtimeSession.setFastMode(configuredFastMode)
+          : undefined;
+      const initialState = await runtimeSession.getState();
+      if (fastModeResult && resumeConfig.config.featureValues) {
+        resumeConfig.config.featureValues = {
+          ...resumeConfig.config.featureValues,
+          fast_mode: fastModeResult.enabled,
+        };
+      }
       return new OmpAgentSession({
         runtimeSession,
         config: resumeConfig.config,
-        initialState: await runtimeSession.getState(),
+        initialState,
         currentModeId: launchMode.modeId,
         logger: this.logger,
         subagentCardScheduler: this.subagentCardScheduler,
@@ -2350,8 +2435,16 @@ export class OmpAgentClient implements AgentClient {
     }
   }
 
-  async listFeatures(_config: AgentSessionConfig): Promise<AgentFeature[]> {
-    return [];
+  async listFeatures(config: AgentSessionConfig): Promise<AgentFeature[]> {
+    if (!ompFastModeSupportedForModelId(config.model)) {
+      return [];
+    }
+    return [
+      {
+        ...CODEX_FAST_MODE_FEATURE,
+        value: config.featureValues?.fast_mode === true,
+      },
+    ];
   }
 
   async listImportableSessions(

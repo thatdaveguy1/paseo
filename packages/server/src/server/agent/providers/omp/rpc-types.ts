@@ -128,6 +128,8 @@ export const OmpSessionStateSchema = z
     isStreaming: z.boolean(),
     isCompacting: z.boolean(),
     autoCompactionEnabled: z.boolean().optional(),
+    fastModeEnabled: z.boolean().optional(),
+    fastModeActive: z.boolean().optional(),
     sessionFile: z.string().optional(),
     sessionId: z.string(),
     sessionName: z.string().optional(),
@@ -544,6 +546,7 @@ export const OmpRpcCommandSchema = z.discriminatedUnion("type", [
     type: z.literal("handoff"),
     customInstructions: z.string().optional(),
   }),
+  z.object({ ...OmpCommandBase, type: z.literal("set_fast_mode"), enabled: z.boolean() }),
 ]);
 
 export const OmpPromptAckSchema = z
@@ -570,6 +573,9 @@ export const OmpBranchMessagesResultSchema = z
     messages: z.array(z.object({ entryId: z.string(), text: z.string() }).passthrough()).optional(),
   })
   .passthrough();
+export const OmpSetFastModeResultSchema = z
+  .object({ enabled: z.boolean(), active: z.boolean() })
+  .passthrough();
 
 export type OmpThinkingLevel = z.infer<typeof OmpThinkingLevelSchema>;
 export type OmpImageContent = z.infer<typeof OmpImageContentSchema>;
@@ -582,6 +588,7 @@ export type OmpModel = z.infer<typeof OmpModelSchema>;
 export type OmpModelThinking = z.infer<typeof OmpModelThinkingSchema>;
 export type OmpSessionState = z.infer<typeof OmpSessionStateSchema>;
 export type OmpSessionStats = z.infer<typeof OmpSessionStatsSchema>;
+export type OmpSetFastModeResult = z.infer<typeof OmpSetFastModeResultSchema>;
 export type OmpRpcSlashCommand = z.infer<typeof OmpRpcSlashCommandSchema>;
 export type OmpAgentToolResult = z.infer<typeof OmpAgentToolResultSchema>;
 export type OmpRpcHostToolDefinition = z.infer<typeof OmpRpcHostToolDefinitionSchema>;

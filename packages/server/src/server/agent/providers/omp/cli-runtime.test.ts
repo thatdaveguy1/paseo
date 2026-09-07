@@ -263,6 +263,19 @@ describe("OMP CLI runtime", () => {
     ]);
   });
 
+  test("sends the native set_fast_mode RPC and parses enabled and active", async () => {
+    const child = createOmpChild();
+    const commands: Record<string, unknown>[] = [];
+    replyToCommands(child, (command) => {
+      commands.push(command);
+      return command.type === "set_fast_mode" ? { enabled: true, active: false } : {};
+    });
+    const session = await createRuntime(child).startSession({ cwd: "/workspace/project" });
+
+    await expect(session.setFastMode(true)).resolves.toEqual({ enabled: true, active: false });
+    expect(commands.map(withoutRequestId)).toEqual([{ type: "set_fast_mode", enabled: true }]);
+  });
+
   test("wraps OMP subagent RPC commands", async () => {
     const child = createOmpChild();
     const commands: Record<string, unknown>[] = [];

@@ -119,6 +119,101 @@ function createToolCatalog(): PaseoToolCatalog {
 }
 
 describe("OMP agent client and session", () => {
+  test("advertises Fast only for supported provider-qualified Codex models", async () => {
+    const supported = new OmpHarness();
+    await supported.start({
+      model: "openai-codex/gpt-5.6-luna",
+      featureValues: { fast_mode: true },
+    });
+    expect(supported.features()).toEqual([
+      expect.objectContaining({ id: "fast_mode", type: "toggle", value: true }),
+    ]);
+
+    const unsupported = new OmpHarness();
+    await unsupported.start({ model: "openai-completions/gpt-5.6-luna" });
+    expect(unsupported.features()).toEqual([]);
+
+    const client = new OmpHarness();
+    await expect(client.clientFeatures({ model: "openai-codex/gpt-5.6-luna" })).resolves.toEqual([
+      expect.objectContaining({ id: "fast_mode", value: false }),
+    ]);
+  });
+
+  test("applies Fast through native RPC without relaunch and keeps active separate", async () => {
+    const omp = new OmpHarness();
+    await omp.start({ model: "openai-codex/gpt-5.6-luna" });
+    const runtime = omp.runtime();
+    runtime.setFastModeResult = { enabled: true, active: false };
+
+    await omp.setFeature("fast_mode", true);
+
+    expect(runtime.setFastModeRequests).toEqual([true]);
+    expect(runtime.state).toMatchObject({ fastModeEnabled: true, fastModeActive: false });
+    expect(omp.features()).toEqual([expect.objectContaining({ id: "fast_mode", value: true })]);
+    expect(runtime.setFastModeRequests).toHaveLength(1);
+  });
+
+  test("does not advertise Fast when an older OMP state omits its state fields", async () => {
+    const omp = new OmpHarness();
+    await omp.start({ model: "openai-codex/gpt-5.6-luna" });
+    const runtime = omp.runtime();
+    delete runtime.state.fastModeEnabled;
+    delete runtime.state.fastModeActive;
+
+    expect(omp.features()).toEqual([]);
+    runtime.setFastModeError = new Error("set_fast_mode is not supported");
+    await expect(omp.setFeature("fast_mode", true)).rejects.toThrow(
+      "set_fast_mode is not supported",
+    );
+  });
+
+  test("applies persisted Fast values before the initial state read on create and resume", async () => {
+    const created = new OmpHarness();
+    await created.start({
+      model: "openai-codex/gpt-5.6-luna",
+      featureValues: { fast_mode: true },
+    });
+    expect(created.runtime().setFastModeRequests).toEqual([true]);
+    expect(created.runtime().getStateRequestCount).toBe(1);
+
+    const resumed = new OmpHarness();
+    await resumed.resume(
+      { user: { id: "u1", text: "hello" }, assistant: { id: "a1", text: "hi" } },
+      { model: "openai-codex/gpt-5.6-luna", featureValues: { fast_mode: false } },
+    );
+    expect(resumed.runtime().setFastModeRequests).toEqual([false]);
+    expect(resumed.runtime().getStateRequestCount).toBe(1);
+  });
+
+  test("refreshes state and removes stale Fast values after switching models", async () => {
+    const omp = new OmpHarness();
+    await omp.start({
+      model: "openai-codex/gpt-5.6-luna",
+      featureValues: { fast_mode: true },
+    });
+    const runtime = omp.runtime();
+    runtime.setModelResult = {
+      provider: "nvidia",
+      id: "minimaxai/minimax-m3",
+    };
+    runtime.state = { ...runtime.state, model: runtime.setModelResult };
+
+    await omp.setModel("nvidia/minimaxai/minimax-m3");
+
+    expect(runtime.getStateRequestCount).toBe(2);
+    expect(omp.features()).toEqual([]);
+  });
+
+  test("surfaces native Fast RPC failures", async () => {
+    const omp = new OmpHarness();
+    await omp.start({ model: "openai-codex/gpt-5.6-luna" });
+    const error = new Error("set_fast_mode is not supported");
+    omp.runtime().setFastModeError = error;
+
+    await expect(omp.setFeature("fast_mode", true)).rejects.toThrow(error.message);
+    expect(omp.runtime().setFastModeRequests).toEqual([true]);
+  });
+
   test("owns launch configuration and registers native host tools", async () => {
     const omp = new OmpHarness();
     await omp.start({ modeId: "ask" }, createToolCatalog());
